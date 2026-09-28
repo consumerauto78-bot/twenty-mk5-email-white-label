@@ -1,0 +1,1010 @@
+diff --git a/TWENTY_WHITE_LABEL_CUSTOMIZATIONS.md b/TWENTY_WHITE_LABEL_CUSTOMIZATIONS.md
+new file mode 100644
+index 00000000..6d6bb9e8
+--- /dev/null
++++ b/TWENTY_WHITE_LABEL_CUSTOMIZATIONS.md
+@@ -0,0 +1,144 @@
++# MK5 Dealer Intelligence — Twenty Transactional Email White-Label Customization
++
++## Scope and patch identity
++
++- **Product-facing identity:** MK5 Dealer Intelligence
++- **Underlying platform:** Twenty CRM
++- **White-label patch base:** **Twenty v2.39.5**
++- **Pinned upstream commit:** `032674e5298b905c69637649b4033203401016f6`
++- **Customization scope:** Client-facing transactional-email presentation and sender display name only.
++- **Out of scope:** Twenty package names, SDKs, CLI, APIs, database schema, internal identifiers, environment-variable names, authentication, authorization, invitation-token mechanics, password-reset mechanics, role assignment, session handling, and CRM records.
++
++This is a deliberately small, version-pinned customization layer. It is **not** a broad Twenty fork.
++
++## Centralized branding configuration
++
++`packages/twenty-emails/src/config/mk5-email-branding.ts` is the single client-email branding source. It defines:
++
++| Setting | Value / purpose |
++|---|---|
++| Product name | `MK5 Dealer Intelligence` |
++| Application URL | Existing Railway host: `https://twenty-server-production-e6d4.up.railway.app` |
++| Durable header-logo path | `/images/branding/mk5-dealer-intelligence-email-logo.png` |
++| Invitation subject | `You're invited to MK5 Dealer Intelligence` |
++| Invitation heading | `You've been invited to MK5 Dealer Intelligence` |
++| Invitation CTA | `Accept Invitation` |
++| Footer identity | `MK5 Dealer Intelligence` + `This is an automated account notification.` |
++
++The public branding image is a 512 × 512 PNG copied into `packages/twenty-front/public/images/branding/`. The standard Twenty frontend build copies that file into the server’s static `dist/front` directory. Its resulting URL is HTTPS, public, stable at the existing Railway host, unauthenticated, and does **not** use a signed workspace-file URL or expand the security-sensitive file-token lifetime.
++
++## Customized files and behavior
++
++| Path | Purpose |
++|---|---|
++| `packages/twenty-emails/src/config/mk5-email-branding.ts` | Centralized client-email identity, application URL, durable-logo URL, invitation copy, and footer copy. |
++| `packages/twenty-emails/src/components/BaseEmail.tsx` | Uses the simplified branded footer. |
++| `packages/twenty-emails/src/components/BaseHead.tsx` | Changes the email document title from Twenty branding to an MK5 notification title. |
++| `packages/twenty-emails/src/components/Logo.tsx` | Replaces the hard-coded Twenty logo with the durable MK5 PNG and the alt text `MK5 Dealer Intelligence`. |
++| `packages/twenty-emails/src/components/Footer.tsx` | Replaces Twenty website, GitHub, documentation, developer links, and corporate footer with the minimal MK5 transactional footer. |
++| `packages/twenty-emails/src/components/CallToAction.tsx` | Uses restrained MK5 navy/slate CTA styling without changing links or actions. |
++| `packages/twenty-emails/src/components/WhatIsTwenty.tsx` | Replaces the client-visible generic Twenty product explanation with neutral MK5 Dealer Intelligence copy. The internal component name is deliberately retained. |
++| `packages/twenty-emails/src/emails/send-invite-link.email.tsx` | Uses the approved invitation heading/body/CTA and durable header/context logo while preserving the supplied signed invitation URL. |
++| `packages/twenty-emails/src/emails/password-reset-link.email.tsx` | Keeps the reset-token behavior intact; preview-only URL is changed to the Railway host. Shared header/footer apply the white-label identity. |
++| `packages/twenty-emails/src/emails/password-update-notify.email.tsx` | Replaces the client CTA `Connect to Twenty` with `Open MK5 Dealer Intelligence`; no password behavior changes. |
++| `packages/twenty-emails/src/emails/send-email-verification-link.email.tsx` | Replaces visible Twenty account language in signup/email-change verification content; does not enable verification or alter tokens. |
++| `packages/twenty-emails/src/index.ts` | Exports the centralized branding constants for the existing server package. |
++| `packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts` | Keeps invitation generation, expiration, role assignment, and token URL construction unchanged; changes only sender display name and subject to the centralized MK5 values. |
++| `packages/twenty-server/src/engine/core-modules/email-verification/services/email-verification.service.ts` | Keeps verification-token generation and delivery semantics unchanged; changes only the ordinary signup subject. |
++| `packages/twenty-server/src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts` | Removes the remaining client-facing `(via Twenty)` sender display label. |
++| `packages/twenty-front/public/images/branding/mk5-dealer-intelligence-email-logo.png` | Durable first-party public PNG used by transactional emails. |
++| `packages/twenty-emails/scripts/verify-mk5-client-email-branding.mjs` | Renders invitation, password reset, password change, and verification templates and asserts required MK5 copy plus absence of Twenty branding URLs/text. |
++| `packages/twenty-server/scripts/verify-mk5-invitation-sender.mjs` | Checks the client-facing invitation and access-domain sender/subject code paths for the centralized branding behavior. |
++
++## Explicitly preserved authentication and access behavior
++
++The patch does **not** alter:
++
++- workspace invitation token creation, validation, invalidation, expiration, or signed links;
++- password-reset token creation, validation, expiration, or signed links;
++- email-verification token creation, validation, or current enablement state;
++- workspace/user creation, role assignment, `Dealer Intelligence Operator` permissions, default role, sessions, or authorization;
++- SMTP host, sender-domain address, or credential configuration;
++- workspace logo metadata, database structure, CRM content, or imports.
++
++The sender address remains the existing SMTP address. Only the display name becomes `MK5 Dealer Intelligence` for the scoped client-facing sender paths.
++
++## Required verification
++
++### Automated/rendering checks
++
++Run after every rebase or upgrade:
++
++```bash
++source /home/ubuntu/.nvm/nvm.sh
++nvm use 24
++corepack yarn install --immutable
++corepack yarn nx run twenty-emails:build
++node packages/twenty-emails/scripts/verify-mk5-client-email-branding.mjs
++node packages/twenty-server/scripts/verify-mk5-invitation-sender.mjs
++git diff --check
++```
++
++The branding renderer verifies that the generated ordinary-client templates contain `MK5 Dealer Intelligence` and that the invitation contains `Accept Invitation`, but do not contain:
++
++- `Join your team on Twenty`;
++- `via Twenty`;
++- `Twenty logo`;
++- `twenty.com`, `app.twenty.com`, `twentyhq/twenty`, or Twenty documentation URLs.
++
++### Required controlled live tests
++
++Before calling the release fully accepted, use an approved internal/test mailbox only:
++
++1. Invite the test user with the already-approved **Dealer Intelligence Operator** role.
++2. Confirm the sender display name, subject, header/logo/alt text, heading, body, CTA, footer, and signed invitation action.
++3. Accept the invitation, complete account setup, and confirm login and least-privilege Operator access.
++4. Request a password reset and verify the branded message and valid reset flow.
++5. Confirm a password-change notification and, if enabled in a future controlled test, verification/email-change messages.
++6. Reconfirm existing administrator authentication and the Operator role matrix.
++
++Never send test messages to a client address. If an approved test identity is unavailable, record **LIVE EMAIL QA BLOCKED — TEST IDENTITY REQUIRED** rather than improvising.
++
++## Upgrade and rebase procedure
++
++A Twenty upgrade must never silently overwrite this layer.
++
++1. Identify the candidate upstream Twenty release and its immutable commit.
++2. Clone/checkout that exact upstream version in a clean worktree.
++3. Review upstream changes to every customized file listed above, especially shared email components and invitation/auth services.
++4. Reapply the small customization patch manually or with `git apply`; resolve conflicts deliberately.
++5. Update the patch-base version and commit in this document and in `mk5-email-branding.ts`.
++6. Verify the durable static logo remains included by the frontend build and reachable at the intended HTTPS URL.
++7. Run the automated/rendering checks above plus relevant Twenty email/authentication tests.
++8. Use a non-production/test deployment where available to execute controlled invitation and password-reset regression tests.
++9. Review the production diff, source offer, sender address, and rollback path.
++10. Deploy server and worker together only after validation; monitor both for email/authentication errors.
++
++## Rollback
++
++This patch changes no database schema or CRM data. If a production invitation or authentication regression is observed:
++
++1. Immediately redeploy both the Twenty Server and Twenty Worker from the prior approved `twentycrm/twenty:v2.39.5` deployment image/commit.
++2. Confirm `/healthz`, existing administrator sign-in, and worker startup.
++3. Do **not** retry client invitations until the failure is understood.
++4. Preserve non-secret logs and the failed build identifier for diagnosis.
++5. Re-run the controlled test sequence only after a corrected, reviewed patch is available.
++
++The release record must capture the prior deployment identifier and the customized deployment identifier at deployment time.
++
++## AGPL Section 13 and source availability
++
++Twenty remains clearly identified internally as the underlying platform; upstream copyright notices and license files are not removed or rewritten.
++
++Because a modified version is offered to users over a network, AGPLv3 Section 13 requires users interacting remotely with the modified version to be offered the complete corresponding source at no charge. For this narrow layer, the corresponding source offer must make available:
++
++1. the exact upstream Twenty v2.39.5 source at commit `032674e5298b905c69637649b4033203401016f6`;
++2. this complete white-label patch, including the branding asset and test scripts;
++3. reproducible instructions to checkout the pinned upstream source and apply the patch; and
++4. any scripts needed to build/run the modified version.
++
++A public source-offer location must be finalized and linked prominently for network users **before or alongside production deployment**. A private repository alone is not a sufficient public source offer. The appropriate no-broad-fork approach is a small public patch repository that points to the exact public upstream source and includes the full patch plus reproducible application instructions. Do not portray the customized deployment as the official Twenty service.
++
++## Secret handling
++
++No credentials, tokens, SMTP passwords, Railway values, API keys, session data, or Docker data belong in this customization, the patch repository, screenshots, or documentation. The SMTP/mailbox password previously typed into chat remains a rotation item after final controlled email testing; its current value must never be retrieved or repeated.
+diff --git a/packages/twenty-emails/scripts/verify-mk5-client-email-branding.mjs b/packages/twenty-emails/scripts/verify-mk5-client-email-branding.mjs
+new file mode 100644
+index 00000000..09bb0a4f
+--- /dev/null
++++ b/packages/twenty-emails/scripts/verify-mk5-client-email-branding.mjs
+@@ -0,0 +1,24 @@
++import assert from 'node:assert/strict';
++import { SendInviteLinkEmail, renderEmail, PasswordResetLinkEmail, PasswordUpdateNotifyEmail, SendEmailVerificationLinkEmail } from '../dist/index.js';
++
++const render = (component) => renderEmail(component);
++const invitation = await render(SendInviteLinkEmail({
++  link: 'https://example.test/invite?token=redacted',
++  workspace: { name: 'MK5 Dealer Intelligence', logo: undefined },
++  sender: { email: 'inviter@example.test', firstName: 'Inviter', lastName: 'Example' },
++  serverUrl: 'https://example.test', locale: 'en',
++}));
++const reset = await render(PasswordResetLinkEmail({ duration: '24 hours', hasPassword: true, link: 'https://example.test/reset', locale: 'en' }));
++const changed = await render(PasswordUpdateNotifyEmail({ userName: 'Example', email: 'operator@example.test', link: 'https://example.test', locale: 'en' }));
++const verification = await render(SendEmailVerificationLinkEmail({ link: 'https://example.test/verify', locale: 'en' }));
++for (const html of [invitation, reset, changed, verification]) {
++  assert.match(html, /MK5 Dealer Intelligence/);
++  assert.doesNotMatch(html, /app\.twenty\.com|twentyhq\/twenty|docs\.twenty\.com|Twenty logo/i);
++}
++assert.match(invitation, /Accept Invitation/);
++assert.match(invitation, /You(?:&apos;|&#x27;|')ve been invited to MK5 Dealer Intelligence/);
++assert.doesNotMatch(invitation, /Join your team on Twenty|via Twenty/i);
++assert.doesNotMatch(invitation, /twenty\.com/i);
++assert.match(changed, /Open MK5 Dealer Intelligence/);
++assert.match(verification, /MK5 Dealer Intelligence/);
++console.log('PASS: MK5 client-facing transactional-email render checks');
+diff --git a/packages/twenty-emails/src/components/BaseEmail.tsx b/packages/twenty-emails/src/components/BaseEmail.tsx
+index 63d24b42..fb95924c 100644
+--- a/packages/twenty-emails/src/components/BaseEmail.tsx
++++ b/packages/twenty-emails/src/components/BaseEmail.tsx
+@@ -24,7 +24,7 @@ export const BaseEmail = ({ children, width, locale }: BaseEmailProps) => {
+         <Container width={width || 290}>
+           <Logo />
+           {children}
+-          <Footer i18n={i18nInstance} />
++          <Footer />
+         </Container>
+       </Html>
+     </I18nProvider>
+diff --git a/packages/twenty-emails/src/components/BaseHead.tsx b/packages/twenty-emails/src/components/BaseHead.tsx
+index 61680ce5..923f6a2d 100644
+--- a/packages/twenty-emails/src/components/BaseHead.tsx
++++ b/packages/twenty-emails/src/components/BaseHead.tsx
+@@ -5,7 +5,7 @@ import { canvasTheme } from 'src/common-style';
+ export const BaseHead = () => {
+   return (
+     <Head>
+-      <title>Twenty email</title>
++      <title>MK5 Dealer Intelligence notification</title>
+       <Font
+         fontFamily={canvasTheme.font.family}
+         fallbackFontFamily="sans-serif"
+diff --git a/packages/twenty-emails/src/components/CallToAction.tsx b/packages/twenty-emails/src/components/CallToAction.tsx
+index bce63c05..01435536 100644
+--- a/packages/twenty-emails/src/components/CallToAction.tsx
++++ b/packages/twenty-emails/src/components/CallToAction.tsx
+@@ -7,9 +7,10 @@ const callToActionStyle = {
+   display: 'inline-flex',
+   padding: '8px 32px',
+   borderRadius: canvasTheme.border.radius.md,
+-  border: `1px solid ${canvasTheme.background.transparent.light}`,
+-  background: canvasTheme.background.button,
+-  boxShadow: `0px 2px 4px 0px ${canvasTheme.background.transparent.light}, 0px 0px 4px 0px ${canvasTheme.background.transparent.medium}`,
++  border: '1px solid #0f2b43',
++  background: '#163b5c',
++  boxShadow:
++    '0px 2px 4px 0px rgba(15, 43, 67, 0.2), 0px 0px 4px 0px rgba(15, 43, 67, 0.16)',
+   color: canvasTheme.font.colors.inverted,
+   fontSize: canvasTheme.font.size.md,
+   fontWeight: canvasTheme.font.weight.bold,
+diff --git a/packages/twenty-emails/src/components/Footer.tsx b/packages/twenty-emails/src/components/Footer.tsx
+index 66837123..98a720ec 100644
+--- a/packages/twenty-emails/src/components/Footer.tsx
++++ b/packages/twenty-emails/src/components/Footer.tsx
+@@ -1,64 +1,17 @@
+-import { type I18n } from '@lingui/core';
+-import { Column, Container, Row } from 'react-email';
+-import { Link } from 'src/components/Link';
++import { Container } from 'react-email';
++import { CLIENT_EMAIL_BRANDING } from 'src/config/mk5-email-branding';
+ import { ShadowText } from 'src/components/ShadowText';
+ 
+-const footerContainerStyle = {
+-  marginTop: '12px',
+-};
++const footerContainerStyle = { marginTop: '12px' };
+ 
+-type FooterProps = {
+-  i18n: I18n;
+-};
+-
+-export const Footer = ({ i18n }: FooterProps) => {
+-  return (
+-    <Container style={footerContainerStyle}>
+-      <Row>
+-        <Column>
+-          <ShadowText>
+-            <Link
+-              href="https://twenty.com/"
+-              value={i18n._('Website')}
+-              aria-label={i18n._("Visit Twenty's website")}
+-            />
+-          </ShadowText>
+-        </Column>
+-        <Column>
+-          <ShadowText>
+-            <Link
+-              href="https://github.com/twentyhq/twenty"
+-              value={i18n._('Github')}
+-              aria-label={i18n._("Visit Twenty's GitHub repository")}
+-            />
+-          </ShadowText>
+-        </Column>
+-        <Column>
+-          <ShadowText>
+-            <Link
+-              href="https://docs.twenty.com/getting-started/introduction"
+-              value={i18n._('User guide')}
+-              aria-label={i18n._("Read Twenty's user guide")}
+-            />
+-          </ShadowText>
+-        </Column>
+-        <Column>
+-          <ShadowText>
+-            <Link
+-              href="https://docs.twenty.com/"
+-              value={i18n._('Developers')}
+-              aria-label={i18n._("Visit Twenty's developer documentation")}
+-            />
+-          </ShadowText>
+-        </Column>
+-      </Row>
+-      <ShadowText>
+-        <>
+-          {i18n._('Twenty.com, Public Benefit Corporation')}
+-          <br />
+-          {i18n._('San Francisco / Paris')}
+-        </>
+-      </ShadowText>
+-    </Container>
+-  );
+-};
++export const Footer = () => (
++  <Container style={footerContainerStyle}>
++    <ShadowText>
++      <>
++        {CLIENT_EMAIL_BRANDING.productName}
++        <br />
++        {CLIENT_EMAIL_BRANDING.automatedNotificationText}
++      </>
++    </ShadowText>
++  </Container>
++);
+diff --git a/packages/twenty-emails/src/components/Logo.tsx b/packages/twenty-emails/src/components/Logo.tsx
+index 784aeb16..7eb7087c 100644
+--- a/packages/twenty-emails/src/components/Logo.tsx
++++ b/packages/twenty-emails/src/components/Logo.tsx
+@@ -1,17 +1,17 @@
+ import { Img } from 'react-email';
++import {
++  EMAIL_LOGO_URL,
++  CLIENT_EMAIL_BRANDING,
++} from 'src/config/mk5-email-branding';
+ 
+-const logoStyle = {
+-  marginBottom: '40px',
+-};
++const logoStyle = { marginBottom: '40px' };
+ 
+-export const Logo = () => {
+-  return (
+-    <Img
+-      src="https://app.twenty.com/images/icons/windows11/Square150x150Logo.scale-100.png"
+-      alt="Twenty logo"
+-      width="40"
+-      height="40"
+-      style={logoStyle}
+-    />
+-  );
+-};
++export const Logo = () => (
++  <Img
++    src={EMAIL_LOGO_URL}
++    alt={CLIENT_EMAIL_BRANDING.productName}
++    width="40"
++    height="40"
++    style={logoStyle}
++  />
++);
+diff --git a/packages/twenty-emails/src/components/WhatIsTwenty.tsx b/packages/twenty-emails/src/components/WhatIsTwenty.tsx
+index 096a6c0b..1eb636e3 100644
+--- a/packages/twenty-emails/src/components/WhatIsTwenty.tsx
++++ b/packages/twenty-emails/src/components/WhatIsTwenty.tsx
+@@ -1,20 +1,12 @@
+-import { type I18n } from '@lingui/core';
+ import { MainText } from 'src/components/MainText';
+ import { SubTitle } from 'src/components/SubTitle';
+ 
+-type WhatIsTwentyProps = {
+-  i18n: I18n;
+-};
+-
+-export const WhatIsTwenty = ({ i18n }: WhatIsTwentyProps) => {
+-  return (
+-    <>
+-      <SubTitle value={i18n._('What is Twenty?')} />
+-      <MainText>
+-        {i18n._(
+-          "It's a CRM, a software to help businesses manage their customer data and relationships efficiently.",
+-        )}
+-      </MainText>
+-    </>
+-  );
+-};
++export const WhatIsTwenty = () => (
++  <>
++    <SubTitle value="About MK5 Dealer Intelligence" />
++    <MainText>
++      A purpose-built CRM workspace for dealer research, relationship
++      intelligence, and opportunity management.
++    </MainText>
++  </>
++);
+diff --git a/packages/twenty-emails/src/config/mk5-email-branding.ts b/packages/twenty-emails/src/config/mk5-email-branding.ts
+new file mode 100644
+index 00000000..74ca30c2
+--- /dev/null
++++ b/packages/twenty-emails/src/config/mk5-email-branding.ts
+@@ -0,0 +1,32 @@
++/**
++ * Client-facing email branding for the MK5 Dealer Intelligence deployment.
++ *
++ * WHITE-LABEL PATCH BASE: Twenty v2.39.5 (032674e5298b905c69637649b4033203401016f6)
++ *
++ * Keep Twenty package names, SDKs, APIs, data structures, and authentication
++ * mechanics unchanged. This module controls presentation-only copy and assets.
++ */
++export const CLIENT_EMAIL_BRANDING = {
++  productName: 'MK5 Dealer Intelligence',
++  productUrl: 'https://twenty-server-production-e6d4.up.railway.app',
++  emailLogoPath: '/images/branding/mk5-dealer-intelligence-email-logo.png',
++  automatedNotificationText: 'This is an automated account notification.',
++  invitation: {
++    subject: "You're invited to MK5 Dealer Intelligence",
++    heading: "You've been invited to MK5 Dealer Intelligence",
++    body: "You've been invited to join the MK5 Dealer Intelligence platform.",
++    action: 'Accept Invitation',
++  },
++  password: {
++    changedAction: 'Open MK5 Dealer Intelligence',
++  },
++  verification: {
++    signupSubject: 'Please confirm your MK5 Dealer Intelligence email',
++    signupBody:
++      'Thanks for registering for MK5 Dealer Intelligence. Before we get started, please confirm that this is you.',
++    emailUpdateBody:
++      'We received a request to change the email address associated with your MK5 Dealer Intelligence account. Click below to confirm this change.',
++  },
++} as const;
++
++export const EMAIL_LOGO_URL = `${CLIENT_EMAIL_BRANDING.productUrl}${CLIENT_EMAIL_BRANDING.emailLogoPath}`;
+diff --git a/packages/twenty-emails/src/emails/password-reset-link.email.tsx b/packages/twenty-emails/src/emails/password-reset-link.email.tsx
+index 51a9c8e6..f1e1de6e 100644
+--- a/packages/twenty-emails/src/emails/password-reset-link.email.tsx
++++ b/packages/twenty-emails/src/emails/password-reset-link.email.tsx
+@@ -48,7 +48,7 @@ export const PasswordResetLinkEmail = ({
+ PasswordResetLinkEmail.PreviewProps = {
+   duration: '24 hours',
+   hasPassword: true,
+-  link: 'https://app.twenty.com/reset-password/123',
++  link: 'https://twenty-server-production-e6d4.up.railway.app/reset-password/123',
+   locale: 'en',
+ } as PasswordResetLinkEmailProps;
+ 
+diff --git a/packages/twenty-emails/src/emails/password-update-notify.email.tsx b/packages/twenty-emails/src/emails/password-update-notify.email.tsx
+index f8c73db9..f9c1365f 100644
+--- a/packages/twenty-emails/src/emails/password-update-notify.email.tsx
++++ b/packages/twenty-emails/src/emails/password-update-notify.email.tsx
+@@ -3,6 +3,7 @@ import { BaseEmail } from 'src/components/BaseEmail';
+ import { CallToAction } from 'src/components/CallToAction';
+ import { MainText } from 'src/components/MainText';
+ import { Title } from 'src/components/Title';
++import { CLIENT_EMAIL_BRANDING } from 'src/config/mk5-email-branding';
+ import { createI18nInstance } from 'src/utils/i18n.utils';
+ import { type APP_LOCALES } from 'twenty-shared/translations';
+ 
+@@ -43,7 +44,10 @@ export const PasswordUpdateNotifyEmail = ({
+         <br />
+       </MainText>
+       <br />
+-      <CallToAction value={i18n._('Connect to Twenty')} href={link} />
++      <CallToAction
++        value={CLIENT_EMAIL_BRANDING.password.changedAction}
++        href={link}
++      />
+       <br />
+       <br />
+     </BaseEmail>
+@@ -53,7 +57,7 @@ export const PasswordUpdateNotifyEmail = ({
+ PasswordUpdateNotifyEmail.PreviewProps = {
+   userName: 'John Doe',
+   email: 'john.doe@example.com',
+-  link: 'https://app.twenty.com',
++  link: 'https://twenty-server-production-e6d4.up.railway.app',
+   locale: 'en',
+ } as PasswordUpdateNotifyEmailProps;
+ 
+diff --git a/packages/twenty-emails/src/emails/send-email-verification-link.email.tsx b/packages/twenty-emails/src/emails/send-email-verification-link.email.tsx
+index c9acec0b..ada4beca 100644
+--- a/packages/twenty-emails/src/emails/send-email-verification-link.email.tsx
++++ b/packages/twenty-emails/src/emails/send-email-verification-link.email.tsx
+@@ -1,8 +1,8 @@
+-import { Trans } from '@lingui/react';
+ import { BaseEmail } from 'src/components/BaseEmail';
+ import { CallToAction } from 'src/components/CallToAction';
+ import { MainText } from 'src/components/MainText';
+ import { Title } from 'src/components/Title';
++import { CLIENT_EMAIL_BRANDING } from 'src/config/mk5-email-branding';
+ import { createI18nInstance } from 'src/utils/i18n.utils';
+ import { type APP_LOCALES } from 'twenty-shared/translations';
+ 
+@@ -22,8 +22,8 @@ export const SendEmailVerificationLinkEmail = ({
+     ? i18n._('Confirm your new email address')
+     : i18n._('Confirm your email address');
+   const bodyId = isEmailUpdate
+-    ? 'We received a request to change the email address associated with your Twenty account. Click below to confirm this change.'
+-    : 'Thanks for registering for an account on Twenty! Before we get started, we just need to confirm that this is you. Click below to verify your email address.';
++    ? CLIENT_EMAIL_BRANDING.verification.emailUpdateBody
++    : CLIENT_EMAIL_BRANDING.verification.signupBody;
+   const ctaLabel = isEmailUpdate
+     ? i18n._('Confirm new email')
+     : i18n._('Verify Email');
+@@ -31,9 +31,7 @@ export const SendEmailVerificationLinkEmail = ({
+   return (
+     <BaseEmail width={333} locale={locale}>
+       <Title value={title} />
+-      <MainText>
+-        <Trans id={bodyId} />
+-      </MainText>
++      <MainText>{bodyId}</MainText>
+       <br />
+       <CallToAction href={link} value={ctaLabel} />
+       <br />
+@@ -43,7 +41,7 @@ export const SendEmailVerificationLinkEmail = ({
+ };
+ 
+ SendEmailVerificationLinkEmail.PreviewProps = {
+-  link: 'https://app.twenty.com/verify-email/123',
++  link: 'https://twenty-server-production-e6d4.up.railway.app/verify-email/123',
+   locale: 'en',
+   isEmailUpdate: false,
+ };
+diff --git a/packages/twenty-emails/src/emails/send-invite-link.email.tsx b/packages/twenty-emails/src/emails/send-invite-link.email.tsx
+index d29b3ba1..412627f5 100644
+--- a/packages/twenty-emails/src/emails/send-invite-link.email.tsx
++++ b/packages/twenty-emails/src/emails/send-invite-link.email.tsx
+@@ -1,28 +1,20 @@
+-import { Trans } from '@lingui/react';
+ import { Img } from 'react-email';
+-import { canvasTheme } from 'src/common-style';
+-
+ import { BaseEmail } from 'src/components/BaseEmail';
+ import { CallToAction } from 'src/components/CallToAction';
+ import { HighlightedContainer } from 'src/components/HighlightedContainer';
+ import { HighlightedText } from 'src/components/HighlightedText';
+-import { Link } from 'src/components/Link';
+ import { MainText } from 'src/components/MainText';
+ import { Title } from 'src/components/Title';
+-import { WhatIsTwenty } from 'src/components/WhatIsTwenty';
+-import { capitalize } from 'src/utils/capitalize';
+-import { createI18nInstance } from 'src/utils/i18n.utils';
++import {
++  CLIENT_EMAIL_BRANDING,
++  EMAIL_LOGO_URL,
++} from 'src/config/mk5-email-branding';
+ import { type APP_LOCALES } from 'twenty-shared/translations';
+-import { getImageAbsoluteURI } from 'twenty-shared/utils';
+ 
+ type SendInviteLinkEmailProps = {
+   link: string;
+   workspace: { name: string | undefined; logo: string | undefined };
+-  sender: {
+-    email: string;
+-    firstName: string;
+-    lastName: string;
+-  };
++  sender: { email: string; firstName: string; lastName: string };
+   serverUrl: string;
+   locale: keyof typeof APP_LOCALES;
+ };
+@@ -30,66 +22,38 @@ type SendInviteLinkEmailProps = {
+ export const SendInviteLinkEmail = ({
+   link,
+   workspace,
+-  sender,
+-  serverUrl,
+   locale,
+-}: SendInviteLinkEmailProps) => {
+-  const i18n = createI18nInstance(locale);
+-  const workspaceLogo = workspace.logo
+-    ? getImageAbsoluteURI({ imageUrl: workspace.logo, baseUrl: serverUrl })
+-    : null;
+-
+-  const senderName = capitalize(sender.firstName);
+-  const senderEmail = sender.email;
+-  const workspaceName = workspace.name;
+-
+-  return (
+-    <BaseEmail width={333} locale={locale}>
+-      <Title value={i18n._('Join your team on Twenty')} />
+-      <MainText>
+-        <Trans
+-          id="{senderName} (<0>{senderEmail}</0>) has invited you to join a workspace called <1>{workspaceName}</1>."
+-          values={{ senderName, senderEmail, workspaceName }}
+-          components={{
+-            0: (
+-              <Link
+-                href={`mailto:${senderEmail}`}
+-                value={senderEmail}
+-                color={canvasTheme.font.colors.blue}
+-              />
+-            ),
+-            1: <b />,
+-          }}
+-        />
+-        <br />
+-      </MainText>
+-      <HighlightedContainer>
+-        {workspaceLogo ? (
+-          <Img
+-            src={workspaceLogo}
+-            width={40}
+-            height={40}
+-            alt="Workspace logo"
+-          />
+-        ) : (
+-          <></>
+-        )}
+-        {workspace.name ? <HighlightedText value={workspace.name} /> : <></>}
+-        <CallToAction href={link} value={i18n._('Accept invite')} />
+-      </HighlightedContainer>
+-      <WhatIsTwenty i18n={i18n} />
+-    </BaseEmail>
+-  );
+-};
++}: SendInviteLinkEmailProps) => (
++  <BaseEmail width={333} locale={locale}>
++    <Title value={CLIENT_EMAIL_BRANDING.invitation.heading} />
++    <MainText>
++      {`${CLIENT_EMAIL_BRANDING.invitation.body} Use the button below to accept your invitation and set up your account.`}
++    </MainText>
++    <HighlightedContainer>
++      <Img
++        src={EMAIL_LOGO_URL}
++        width={40}
++        height={40}
++        alt={CLIENT_EMAIL_BRANDING.productName}
++      />
++      {workspace.name ? <HighlightedText value={workspace.name} /> : <></>}
++      <CallToAction
++        href={link}
++        value={CLIENT_EMAIL_BRANDING.invitation.action}
++      />
++    </HighlightedContainer>
++  </BaseEmail>
++);
+ 
+ SendInviteLinkEmail.PreviewProps = {
+-  link: 'https://app.twenty.com/invite/123',
+-  workspace: {
+-    name: 'Acme Inc.',
+-    logo: 'https://fakeimg.pl/200x200/?text=ACME&font=lobster',
++  link: 'https://example.test/invite/123',
++  workspace: { name: 'MK5 Dealer Intelligence', logo: undefined },
++  sender: {
++    email: 'example@example.test',
++    firstName: 'Example',
++    lastName: 'User',
+   },
+-  sender: { email: 'john.doe@example.com', firstName: 'John', lastName: 'Doe' },
+-  serverUrl: 'https://app.twenty.com',
++  serverUrl: 'https://example.test',
+   locale: 'en',
+ } as SendInviteLinkEmailProps;
+ 
+diff --git a/packages/twenty-emails/src/index.ts b/packages/twenty-emails/src/index.ts
+index 4796109b..5f3ea742 100644
+--- a/packages/twenty-emails/src/index.ts
++++ b/packages/twenty-emails/src/index.ts
+@@ -4,6 +4,7 @@ export type { JSONContent } from '@tiptap/core';
+ // onto an incompatible major and ship empty email bodies.
+ export { render, toPlainText } from 'react-email';
+ export * from './utils/render-email';
++export * from './config/mk5-email-branding';
+ export * from './emails/billing-subscription-renewing.email';
+ export * from './emails/billing-trial-converting.email';
+ export * from './emails/billing-trial-ending.email';
+diff --git a/packages/twenty-front/public/images/branding/mk5-dealer-intelligence-email-logo.png b/packages/twenty-front/public/images/branding/mk5-dealer-intelligence-email-logo.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9133611facc55050833fa822a0560caff08a855
+GIT binary patch
+literal 11669
+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
+
+literal 0
+HcmV?d00001
+
+diff --git a/packages/twenty-server/scripts/verify-mk5-invitation-sender.mjs b/packages/twenty-server/scripts/verify-mk5-invitation-sender.mjs
+new file mode 100644
+index 00000000..2ccdf15a
+--- /dev/null
++++ b/packages/twenty-server/scripts/verify-mk5-invitation-sender.mjs
+@@ -0,0 +1,23 @@
++import assert from 'node:assert/strict';
++import { readFile } from 'node:fs/promises';
++const source = await readFile(
++  new URL(
++    '../src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts',
++    import.meta.url,
++  ),
++  'utf8',
++);
++const accessDomainSource = await readFile(
++  new URL(
++    '../src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts',
++    import.meta.url,
++  ),
++  'utf8',
++);
++assert.match(source, /CLIENT_EMAIL_BRANDING\.productName/);
++assert.match(source, /CLIENT_EMAIL_BRANDING\.invitation\.subject/);
++assert.doesNotMatch(source, /\(via Twenty\)/);
++assert.doesNotMatch(source, /Join your team on Twenty/);
++assert.match(accessDomainSource, /CLIENT_EMAIL_BRANDING\.productName/);
++assert.doesNotMatch(accessDomainSource, /\(via Twenty\)/);
++console.log('PASS: invitation sender and subject use centralized MK5 branding');
+diff --git a/packages/twenty-server/src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts b/packages/twenty-server/src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts
+index e7581509..6d6c99c1 100644
+--- a/packages/twenty-server/src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/approved-access-domain/services/approved-access-domain.service.ts
+@@ -2,7 +2,11 @@ import { Injectable, Logger } from '@nestjs/common';
+ import { InjectRepository } from '@nestjs/typeorm';
+ 
+ import { msg } from '@lingui/core/macro';
+-import { SendApprovedAccessDomainValidation, renderEmail } from 'twenty-emails';
++import {
++  CLIENT_EMAIL_BRANDING,
++  SendApprovedAccessDomainValidation,
++  renderEmail,
++} from 'twenty-emails';
+ import { FileFolder, SettingsPath } from 'twenty-shared/types';
+ import { getSettingsPath, isDefined } from 'twenty-shared/utils';
+ import { Repository } from 'typeorm';
+@@ -121,7 +125,7 @@ export class ApprovedAccessDomainService {
+     });
+ 
+     await this.emailService.send({
+-      from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
++      from: `${CLIENT_EMAIL_BRANDING.productName} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
+       to,
+       subject: 'Approve your access domain',
+       text,
+diff --git a/packages/twenty-server/src/engine/core-modules/email-verification/services/email-verification.service.ts b/packages/twenty-server/src/engine/core-modules/email-verification/services/email-verification.service.ts
+index 81ed73fb..0a2bdbdc 100644
+--- a/packages/twenty-server/src/engine/core-modules/email-verification/services/email-verification.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/email-verification/services/email-verification.service.ts
+@@ -1,10 +1,13 @@
+ import { Injectable } from '@nestjs/common';
+ import { InjectRepository } from '@nestjs/typeorm';
+ 
+-import { msg } from '@lingui/core/macro';
+ import { addMilliseconds, differenceInMilliseconds } from 'date-fns';
+ import ms from 'ms';
+-import { SendEmailVerificationLinkEmail, renderEmail } from 'twenty-emails';
++import {
++  CLIENT_EMAIL_BRANDING,
++  SendEmailVerificationLinkEmail,
++  renderEmail,
++} from 'twenty-emails';
+ import { type APP_LOCALES } from 'twenty-shared/translations';
+ import { AppPath } from 'twenty-shared/types';
+ import { assertIsDefinedOrThrow, isDefined } from 'twenty-shared/utils';
+@@ -24,7 +27,6 @@ import {
+   EmailVerificationExceptionCode,
+ } from 'src/engine/core-modules/email-verification/email-verification.exception';
+ import { EmailService } from 'src/engine/core-modules/email/email.service';
+-import { I18nService } from 'src/engine/core-modules/i18n/i18n.service';
+ import { TwentyConfigService } from 'src/engine/core-modules/twenty-config/twenty-config.service';
+ import { UserEntity } from 'src/engine/core-modules/user/user.entity';
+ 
+@@ -40,7 +42,6 @@ export class EmailVerificationService {
+     private readonly emailService: EmailService,
+     private readonly twentyConfigService: TwentyConfigService,
+     private readonly emailVerificationTokenService: EmailVerificationTokenService,
+-    private readonly i18nService: I18nService,
+   ) {}
+ 
+   async sendVerificationEmail({
+@@ -99,12 +100,10 @@ export class EmailVerificationService {
+       plainText: true,
+     });
+ 
+-    const emailVerificationMsg =
++    const subject =
+       verificationTrigger === EmailVerificationTrigger.EMAIL_UPDATE
+-        ? msg`Please confirm your updated email`
+-        : msg`Welcome to Twenty: Please Confirm Your Email`;
+-    const i18n = this.i18nService.getI18nInstance(locale);
+-    const subject = i18n._(emailVerificationMsg);
++        ? 'Please confirm your updated email'
++        : CLIENT_EMAIL_BRANDING.verification.signupSubject;
+ 
+     await this.emailService.send({
+       from: `${this.twentyConfigService.get(
+diff --git a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
+index ea391ef5..2e1c9ae1 100644
+--- a/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
++++ b/packages/twenty-server/src/engine/core-modules/workspace-invitation/services/workspace-invitation.service.ts
+@@ -1,12 +1,17 @@
+ import { Injectable } from '@nestjs/common';
+ import { InjectRepository } from '@nestjs/typeorm';
+ 
++import { msg } from '@lingui/core/macro';
++
+ import crypto from 'crypto';
+ 
+-import { msg } from '@lingui/core/macro';
+ import { addMilliseconds } from 'date-fns';
+ import ms from 'ms';
+-import { SendInviteLinkEmail, renderEmail } from 'twenty-emails';
++import {
++  CLIENT_EMAIL_BRANDING,
++  SendInviteLinkEmail,
++  renderEmail,
++} from 'twenty-emails';
+ import { AppPath, FileFolder } from 'twenty-shared/types';
+ import { getAppPath, isDefined } from 'twenty-shared/utils';
+ import {
+@@ -59,9 +64,9 @@ export class WorkspaceInvitationService {
+     private readonly emailService: EmailService,
+     private readonly onboardingService: OnboardingService,
+     private readonly workspaceDomainsService: WorkspaceDomainsService,
+-    private readonly i18nService: I18nService,
+     private readonly throttlerService: ThrottlerService,
+     private readonly fileUrlService: FileUrlService,
++    private readonly i18nService: I18nService,
+   ) {}
+ 
+   async validatePersonalInvitation({
+@@ -403,12 +408,10 @@ export class WorkspaceInvitationService {
+           plainText: true,
+         });
+ 
+-        const joinTeamMsg = msg`Join your team on Twenty`;
+-        const i18n = this.i18nService.getI18nInstance(sender.locale);
+-        const subject = i18n._(joinTeamMsg);
++        const subject = CLIENT_EMAIL_BRANDING.invitation.subject;
+ 
+         await this.emailService.send({
+-          from: `${sender.name.firstName} ${sender.name.lastName} (via Twenty) <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
++          from: `${CLIENT_EMAIL_BRANDING.productName} <${this.twentyConfigService.get('EMAIL_FROM_ADDRESS')}>`,
+           to: invitation.value.email,
+           subject,
+           text,
